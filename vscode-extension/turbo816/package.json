@@ -1,0 +1,25 @@
+{
+    "name": "turbo816",
+    "displayName": "Turbo816",
+    "description": "Syntax highlighting for Turbo816",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.56.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "contributes": {
+        "languages": [{
+            "id": "turbo816",
+            "aliases": ["Turbo816", "turbo816"],
+            "extensions": ["t816"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [{
+            "language": "turbo816",
+            "scopeName": "source.t816",
+            "path": "./syntaxes/turbo816.tmLanguage.json"
+        }]
+    }
+}

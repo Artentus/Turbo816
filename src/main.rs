@@ -256,6 +256,7 @@ fn identifier(input: &str) -> IResult<&str, &str, Error<&str>> {
     )))(input)
 }
 
+// ToDOo: escape sequences
 fn string_literal(input: &str) -> IResult<&str, &str, Error<&str>> {
     recognize(delimited(char('"'), take_while(|c| c != '"'), char('"')))(input)
 }

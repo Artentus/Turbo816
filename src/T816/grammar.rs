@@ -693,16 +693,6 @@ fn directive(input: &str) -> IResult<&str, Directive, Error<&str>> {
             ),
             map(
                 tuple((
-                    tag_no_case("def"),
-                    multispace1,
-                    identifier,
-                    equals_sep,
-                    expression,
-                )),
-                |(_, _, name, _, expr)| Directive::Define(name.to_string(), expr),
-            ),
-            map(
-                tuple((
                     tag_no_case("defreg"),
                     multispace1,
                     identifier,
@@ -710,6 +700,16 @@ fn directive(input: &str) -> IResult<&str, Directive, Error<&str>> {
                     general_purpose_register,
                 )),
                 |(_, _, name, _, reg)| Directive::DefineRegister(name.to_string(), reg),
+            ),
+            map(
+                tuple((
+                    tag_no_case("def"),
+                    multispace1,
+                    identifier,
+                    equals_sep,
+                    expression,
+                )),
+                |(_, _, name, _, expr)| Directive::Define(name.to_string(), expr),
             ),
             map(
                 tuple((

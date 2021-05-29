@@ -1,0 +1,57 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Turbo816",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#meta"
+		},
+		{
+			"include": "#strings"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [
+				{
+					"name": "keyword.control.directive.turbo816",
+					"match": "(?i)\\.\\b(org|def|defreg|byte|word|ascii|asciiz|unicode|unicodez|call|return)\\b"
+				},
+				{
+					"name": "keyword.index-register.turbo816",
+					"match": "(?i)\\b(X|Y)\\b"
+				},
+				{
+					"name": "keyword.general-purpose-register.turbo816",
+					"match": "(?i)\\b((R([0-9]|[1-9][0-9]))|(ARG([0-9]|1[0-5]))|(RET[0-9])|(ERR[01]))\\b"
+				},
+				{
+					"name": "keyword.special-purpose-register.turbo816",
+					"match": "(?i)\\b(SP|FL|DB)\\b"
+				}
+			]
+		},
+		"meta": {
+			"patterns": [
+				{
+					"name": "meta.preprocessor.numeric.label.turbo816",
+					"match": "@\\b([_A-Za-z][_A-Za-z0-9]*)\\b"
+				}
+			]
+		},
+		"strings": {
+			"name": "string.quoted.double.turbo816",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.turbo816",
+					"match": "\\\\n|\\\\r|\\\\t|\\\\\\\\|\\\\\"|\\\\u([0-9A-Fa-f]){4,4}"
+				}
+			]
+		}
+	},
+	"scopeName": "source.t816"
+}
