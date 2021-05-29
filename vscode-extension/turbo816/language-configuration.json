@@ -9,7 +9,7 @@
         ["(", ")"],
         [".fn", ".endfn"],
         [".main", ".endmain"],
-        [".irq", ".endiqr"],
+        [".irq", ".endirq"],
         [".nmi", ".endnmi"],
         [".brk", ".endbrk"]
     ],
@@ -20,7 +20,7 @@
         ["\"", "\""],
         [".fn", ".endfn"],
         [".main", ".endmain"],
-        [".irq", ".endiqr"],
+        [".irq", ".endirq"],
         [".nmi", ".endnmi"],
         [".brk", ".endbrk"]
     ],

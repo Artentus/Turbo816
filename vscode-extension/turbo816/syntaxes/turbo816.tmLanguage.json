@@ -10,6 +10,9 @@
 		},
 		{
 			"include": "#strings"
+		},
+		{
+			"include": "#comments"
 		}
 	],
 	"repository": {
@@ -30,6 +33,22 @@
 				{
 					"name": "keyword.special-purpose-register.turbo816",
 					"match": "(?i)\\b(SP|FL|DB)\\b"
+				},
+				{
+					"name": "keyword.scope.turbo816",
+					"match": "(?i)\\.\\b(fn|endfn|main|endmain|irq|endirq|nmi|endnmi|brk|endbrk)\\b"
+				},
+				{
+					"name": "keyword.instruction.turbo816",
+					"match": "(?i)\\b(TR|LDW|STW|LDB|STB|PUSH|POP|INC|DEC|ADD|ADDC|SUB|SUBB|AND|XOR|OR|NEG|NOT|SHL|SHR|ROL|ROR|JPEQ|JPZ|JPF|JPNEQ|JPNZ|JPT|JPG|JPL|JPNEG|JPGEQ|JPPOS|JPLEQ|JPC|JPCC|JPO|JPNO|JP|CMP|SSF|RSF|BIT|BRK|WAITI)\\b"
+				}
+			]
+		},
+		"constants": {
+			"patterns": [
+				{
+					"name": "constant.language.turbo816",
+					"match": "(?i)\\b(N|V|D|I|Z|C)\\b"
 				}
 			]
 		},
@@ -51,6 +70,14 @@
 					"match": "\\\\n|\\\\r|\\\\t|\\\\\\\\|\\\\\"|\\\\u([0-9A-Fa-f]){4,4}"
 				}
 			]
+		},
+		"comments": {
+			"match": "((//).*$)",
+			"captures": {
+				"1": {
+					"name": "comment.line.turbo816"
+				}
+			}
 		}
 	},
 	"scopeName": "source.t816"
