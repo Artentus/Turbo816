@@ -23,7 +23,7 @@
 			"patterns": [
 				{
 					"name": "keyword.control.directive.turbo816",
-					"match": "(?i)\\.\\b(org|def|defreg|byte|word|ascii|asciiz|unicode|unicodez|call|return)\\b"
+					"match": "(?i)\\.\\b(org|def|reg|byte|word|ascii|asciiz|unicode|unicodez|call|return)\\b"
 				},
 				{
 					"name": "keyword.index-register.turbo816",

@@ -772,7 +772,7 @@ impl Display for Directive {
                 write!(f, ".def {} = {:X}", name, expr)
             }
             Directive::DefineRegister(name, reg) => {
-                write!(f, ".defreg {} = {}", name, reg)
+                write!(f, ".reg {} = {}", name, reg)
             }
             Directive::StoreByte(exprs) => {
                 write!(f, ".byte {}", exprs.to_hex(1, true))
