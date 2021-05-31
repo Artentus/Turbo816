@@ -624,7 +624,7 @@ impl Display for Instruction {
                 write!(f, "ADC ({})", expr.to_hex(1, false))
             }
             Instruction::AdcDirectPageIndirectLong(expr) => {
-                write!(f, "ADC ({})", expr.to_hex(1, false))
+                write!(f, "ADC [{}]", expr.to_hex(1, false))
             }
             Instruction::AdcAbsoluteIndexedX(expr) => {
                 write!(f, "ADC {},X", expr.to_hex(2, false))
@@ -645,7 +645,7 @@ impl Display for Instruction {
                 write!(f, "ADC ({}),Y", expr.to_hex(1, false))
             }
             Instruction::AdcDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "ADC ({}),Y", expr.to_hex(1, false))
+                write!(f, "ADC [{}],Y", expr.to_hex(1, false))
             }
             Instruction::AdcStackRelative(expr) => {
                 write!(f, "ADC {},S", expr.to_hex(1, false))
@@ -664,7 +664,7 @@ impl Display for Instruction {
                 write!(f, "AND ({})", expr.to_hex(1, false))
             }
             Instruction::AndDirectPageIndirectLong(expr) => {
-                write!(f, "AND ({})", expr.to_hex(1, false))
+                write!(f, "AND [{}]", expr.to_hex(1, false))
             }
             Instruction::AndAbsoluteIndexedX(expr) => {
                 write!(f, "AND {},X", expr.to_hex(2, false))
@@ -685,7 +685,7 @@ impl Display for Instruction {
                 write!(f, "AND ({}),Y", expr.to_hex(1, false))
             }
             Instruction::AndDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "AND ({}),Y", expr.to_hex(1, false))
+                write!(f, "AND [{}],Y", expr.to_hex(1, false))
             }
             Instruction::AndStackRelative(expr) => {
                 write!(f, "AND {},S", expr.to_hex(1, false))
@@ -763,7 +763,7 @@ impl Display for Instruction {
                 write!(f, "CMP ({})", expr.to_hex(1, false))
             }
             Instruction::CmpDirectPageIndirectLong(expr) => {
-                write!(f, "CMP ({})", expr.to_hex(1, false))
+                write!(f, "CMP [{}]", expr.to_hex(1, false))
             }
             Instruction::CmpAbsoluteIndexedX(expr) => {
                 write!(f, "CMP {},X", expr.to_hex(2, false))
@@ -784,7 +784,7 @@ impl Display for Instruction {
                 write!(f, "CMP ({}),Y", expr.to_hex(1, false))
             }
             Instruction::CmpDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "CMP ({}),Y", expr.to_hex(1, false))
+                write!(f, "CMP [{}],Y", expr.to_hex(1, false))
             }
             Instruction::CmpStackRelative(expr) => {
                 write!(f, "CMP {},S", expr.to_hex(1, false))
@@ -824,7 +824,7 @@ impl Display for Instruction {
                 write!(f, "EOR ({})", expr.to_hex(1, false))
             }
             Instruction::EorDirectPageIndirectLong(expr) => {
-                write!(f, "EOR ({})", expr.to_hex(1, false))
+                write!(f, "EOR [{}]", expr.to_hex(1, false))
             }
             Instruction::EorAbsoluteIndexedX(expr) => {
                 write!(f, "EOR {},X", expr.to_hex(2, false))
@@ -845,7 +845,7 @@ impl Display for Instruction {
                 write!(f, "EOR ({}),Y", expr.to_hex(1, false))
             }
             Instruction::EorDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "EOR ({}),Y", expr.to_hex(1, false))
+                write!(f, "EOR [{}],Y", expr.to_hex(1, false))
             }
             Instruction::EorStackRelative(expr) => {
                 write!(f, "EOR {},S", expr.to_hex(1, false))
@@ -878,7 +878,7 @@ impl Display for Instruction {
                 write!(f, "JML {}", expr.to_hex(3, false))
             }
             Instruction::JmlAbsoluteIndirectLong(expr) => {
-                write!(f, "JML ({})", expr.to_hex(2, false))
+                write!(f, "JML [{}]", expr.to_hex(2, false))
             }
 
             Instruction::JsrAbsolute(expr) => write!(f, "JSR {}", expr.to_hex(2, false)),
@@ -903,7 +903,7 @@ impl Display for Instruction {
                 write!(f, "LDA ({})", expr.to_hex(1, false))
             }
             Instruction::LdaDirectPageIndirectLong(expr) => {
-                write!(f, "LDA ({})", expr.to_hex(1, false))
+                write!(f, "LDA [{}]", expr.to_hex(1, false))
             }
             Instruction::LdaAbsoluteIndexedX(expr) => {
                 write!(f, "LDA {},X", expr.to_hex(2, false))
@@ -924,7 +924,7 @@ impl Display for Instruction {
                 write!(f, "LDA ({}),Y", expr.to_hex(1, false))
             }
             Instruction::LdaDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "LDA ({}),Y", expr.to_hex(1, false))
+                write!(f, "LDA [{}],Y", expr.to_hex(1, false))
             }
             Instruction::LdaStackRelative(expr) => {
                 write!(f, "LDA {},S", expr.to_hex(1, false))
@@ -988,7 +988,7 @@ impl Display for Instruction {
                 write!(f, "ORA ({})", expr.to_hex(1, false))
             }
             Instruction::OraDirectPageIndirectLong(expr) => {
-                write!(f, "ORA ({})", expr.to_hex(1, false))
+                write!(f, "ORA [{}]", expr.to_hex(1, false))
             }
             Instruction::OraAbsoluteIndexedX(expr) => {
                 write!(f, "ORA {},X", expr.to_hex(2, false))
@@ -1009,7 +1009,7 @@ impl Display for Instruction {
                 write!(f, "ORA ({}),Y", expr.to_hex(1, false))
             }
             Instruction::OraDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "ORA ({}),Y", expr.to_hex(1, false))
+                write!(f, "ORA [{}],Y", expr.to_hex(1, false))
             }
             Instruction::OraStackRelative(expr) => {
                 write!(f, "ORA {},S", expr.to_hex(1, false))
@@ -1077,7 +1077,7 @@ impl Display for Instruction {
                 write!(f, "SBC ({})", expr.to_hex(1, false))
             }
             Instruction::SbcDirectPageIndirectLong(expr) => {
-                write!(f, "SBC ({})", expr.to_hex(1, false))
+                write!(f, "SBC [{}]", expr.to_hex(1, false))
             }
             Instruction::SbcAbsoluteIndexedX(expr) => {
                 write!(f, "SBC {},X", expr.to_hex(2, false))
@@ -1098,7 +1098,7 @@ impl Display for Instruction {
                 write!(f, "SBC ({}),Y", expr.to_hex(1, false))
             }
             Instruction::SbcDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "SBC ({}),Y", expr.to_hex(1, false))
+                write!(f, "SBC [{}],Y", expr.to_hex(1, false))
             }
             Instruction::SbcStackRelative(expr) => {
                 write!(f, "SBC {},S", expr.to_hex(1, false))
@@ -1122,7 +1122,7 @@ impl Display for Instruction {
                 write!(f, "STA ({})", expr.to_hex(1, false))
             }
             Instruction::StaDirectPageIndirectLong(expr) => {
-                write!(f, "STA ({})", expr.to_hex(1, false))
+                write!(f, "STA [{}]", expr.to_hex(1, false))
             }
             Instruction::StaAbsoluteIndexedX(expr) => {
                 write!(f, "STA {},X", expr.to_hex(2, false))
@@ -1143,7 +1143,7 @@ impl Display for Instruction {
                 write!(f, "STA ({}),Y", expr.to_hex(1, false))
             }
             Instruction::StaDirectPageIndirectLongIndexedY(expr) => {
-                write!(f, "STA ({}),Y", expr.to_hex(1, false))
+                write!(f, "STA [{}],Y", expr.to_hex(1, false))
             }
             Instruction::StaStackRelative(expr) => {
                 write!(f, "STA {},S", expr.to_hex(1, false))
