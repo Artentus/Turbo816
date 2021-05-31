@@ -1962,7 +1962,7 @@ pub fn assemble_program(prog: &Program) -> DisplayableVec<u8> {
         }
     }
 
-    let mut result_assembly: Vec<u8> = vec![0; (max_addr - min_addr) as usize]; //Vec::with_capacity((max_addr - min_addr) as usize);
+    let mut result_assembly: Vec<u8> = vec![0; (max_addr - min_addr) as usize];
     for segment in segments.iter() {
         if segment.content.len() > 0 {
             let start = segment.offset as usize - min_addr;

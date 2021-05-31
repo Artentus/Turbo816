@@ -256,9 +256,44 @@ fn identifier(input: &str) -> IResult<&str, &str, Error<&str>> {
     )))(input)
 }
 
-// ToDOo: escape sequences
-fn string_literal(input: &str) -> IResult<&str, &str, Error<&str>> {
-    recognize(delimited(char('"'), take_while(|c| c != '"'), char('"')))(input)
+fn string_literal(input: &str) -> IResult<&str, String, Error<&str>> {
+    fn unescaped_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        satisfy(|c| (c != '"') && (c != '\\'))(input)
+    }
+
+    fn escaped_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        alt((
+            then_return(tag("\\\""), '"'),
+            then_return(tag("\\\\"), '\\'),
+            then_return(tag("\\n"), '\n'),
+            then_return(tag("\\r"), '\r'),
+            then_return(tag("\\t"), '\t'),
+        ))(input)
+    }
+
+    fn unicode_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        map(
+            preceded(tag("\\u"), count(hexadecimal_digit, 4)),
+            |digits| {
+                let hex: String = digits.iter().collect();
+                let value = u16::from_str_radix(&hex, 16).unwrap();
+                let result = char::decode_utf16(std::iter::once(value))
+                    .into_iter()
+                    .next()
+                    .unwrap();
+                result.unwrap_or(char::REPLACEMENT_CHARACTER)
+            },
+        )(input)
+    }
+
+    fn valid_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        alt((unescaped_char, escaped_char, unicode_char))(input)
+    }
+
+    map(
+        delimited(char('"'), many0(valid_char), char('"')),
+        |chars| chars.iter().collect(),
+    )(input)
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]

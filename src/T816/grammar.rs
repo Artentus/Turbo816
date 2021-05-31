@@ -729,19 +729,19 @@ fn directive(input: &str) -> IResult<&str, Directive, Error<&str>> {
             ),
             map(
                 tuple((tag_no_case("asciiz"), multispace1, string_literal)),
-                |(_, _, s)| Directive::AsciiString(s.to_string(), true),
+                |(_, _, s)| Directive::AsciiString(s, true),
             ),
             map(
                 tuple((tag_no_case("ascii"), multispace1, string_literal)),
-                |(_, _, s)| Directive::AsciiString(s.to_string(), false),
+                |(_, _, s)| Directive::AsciiString(s, false),
             ),
             map(
                 tuple((tag_no_case("unicodez"), multispace1, string_literal)),
-                |(_, _, s)| Directive::UnicodeString(s.to_string(), true),
+                |(_, _, s)| Directive::UnicodeString(s, true),
             ),
             map(
                 tuple((tag_no_case("unicode"), multispace1, string_literal)),
-                |(_, _, s)| Directive::UnicodeString(s.to_string(), false),
+                |(_, _, s)| Directive::UnicodeString(s, false),
             ),
             map(
                 tuple((
