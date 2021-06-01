@@ -538,6 +538,20 @@ impl Display for BitTestWithSource {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+pub enum TestSource {
+    IndexRegister(IndexRegister),
+    GeneralPurposeRegister(GeneralPurposeRegister),
+}
+impl Display for TestSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TestSource::IndexRegister(reg) => write!(f, "{}", reg),
+            TestSource::GeneralPurposeRegister(reg) => write!(f, "{}", reg),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub enum Instruction {
     Transfer(TransferArg, TransferArg),
     LoadWord(LoadTarget, LoadWordSource),
@@ -584,6 +598,7 @@ pub enum Instruction {
     ResetStatusFlags(StatusFlagsSource),
 
     BitTest(BitTestSource, BitTestWithSource),
+    Test(TestSource),
 
     SoftwareInterrupt,
     WaitForInterrupt,
@@ -701,6 +716,9 @@ impl Display for Instruction {
             }
             Instruction::BitTest(l, r) => {
                 write!(f, "BIT {}, {}", l, r)
+            }
+            Instruction::Test(s) => {
+                write!(f, "TEST {}", s)
             }
             Instruction::SoftwareInterrupt => {
                 write!(f, "BRK")

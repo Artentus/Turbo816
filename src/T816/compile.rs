@@ -3731,6 +3731,41 @@ fn compile_bit_test_instruction(
     CompileResult::Success(result)
 }
 
+fn compile_test_instruction(
+    source: &TestSource,
+    _identifiers: &IdentifierCollection,
+    _scope_info: Option<(&str, &BlockIdentifierCollection)>,
+    state: &CompileState,
+) -> CompileResult<Vec<W65C816::Statement>> {
+    let mut result: Vec<W65C816::Statement> = Vec::new();
+
+    macro_rules! add_instruction {
+        ($inst:expr) => {
+            result.push(W65C816::Statement::Instruction($inst));
+        };
+    }
+
+    match source {
+        TestSource::IndexRegister(reg) => {
+            match reg {
+                IndexRegister::X => add_instruction!(W65C816::Instruction::TxaImplied),
+                IndexRegister::Y => add_instruction!(W65C816::Instruction::TyaImplied),
+            }
+        },
+        TestSource::GeneralPurposeRegister(reg) => {
+            let addr_opt = get_register_address(reg, &state.reg_defines);
+            match addr_opt {
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::LdaDirectPage(addr));
+                }
+                CompileResult::Failure(msg) => return CompileResult::Failure(msg),
+            }
+        },
+    }
+
+    CompileResult::Success(result)
+}
+
 fn compile_instruction(
     inst: &Instruction,
     identifiers: &IdentifierCollection,
@@ -3885,6 +3920,9 @@ fn compile_instruction(
         }
         Instruction::BitTest(left, right) => {
             compile_bit_test_instruction(left, right, identifiers, scope_info, state)
+        }
+        Instruction::Test(source) => {
+            compile_test_instruction(source, identifiers, scope_info, state)
         }
         Instruction::SoftwareInterrupt => {
             let mut result: Vec<W65C816::Statement> = Vec::with_capacity(1);

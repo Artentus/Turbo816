@@ -356,6 +356,17 @@ fn bit_test_with_source(input: &str) -> IResult<&str, BitTestWithSource, Error<&
     ))(input)
 }
 
+fn test_source(input: &str) -> IResult<&str, TestSource, Error<&str>> {
+    alt((
+        map(index_register, |r| {
+            TestSource::IndexRegister(r)
+        }),
+        map(general_purpose_register, |r| {
+            TestSource::GeneralPurposeRegister(r)
+        }),
+    ))(input)
+}
+
 fn instruction(input: &str) -> IResult<&str, Instruction, Error<&str>> {
     alt((
         alt((
@@ -663,6 +674,14 @@ fn instruction(input: &str) -> IResult<&str, Instruction, Error<&str>> {
                 bit_test_with_source,
             )),
             |(_, _, l, _, r)| Instruction::BitTest(l, r),
+        ),
+        map(
+            tuple((
+                tag_no_case("TEST"),
+                multispace1,
+                test_source,
+            )),
+            |(_, _, s)| Instruction::Test(s),
         ),
         map(tag_no_case("BRK"), |_| Instruction::SoftwareInterrupt),
         map(tag_no_case("WAITI"), |_| Instruction::WaitForInterrupt),
