@@ -1,17 +1,17 @@
 use super::*;
 use crate::*;
 
-// '$' is not a valid char for the programmer to put into
+// '%' is not a valid char for the programmer to put into
 // a label name so these are guaranteed to be unique
-const FUNCTION_PREFIX: &str = "$_FUNCTION_";
-const MAIN_FUNCTION_LABEL: &str = "$_MAIN";
-const MAIN_LOOP_LABEL: &str = "$_MAIN_LOOP";
-const SCOPE_LABEL_PREFIX: &str = "$_SCOPE_";
-const IRQ_FUNCTION_LABEL: &str = "$_IRQ";
-const NMI_FUNCTION_LABEL: &str = "$_NMI";
-const BRK_FUNCTION_LABEL: &str = "$_BRK";
-const JUMP_LABEL_PREFIX: &str = "$_JUMP_";
-const EMPTY_INTERRUPT_LABEL: &str = "$_EMPTY_INTERRUPT";
+const FUNCTION_PREFIX: &str = "%_FUNCTION_";
+const MAIN_FUNCTION_LABEL: &str = "%_MAIN";
+const MAIN_LOOP_LABEL: &str = "%_MAIN_LOOP";
+const SCOPE_LABEL_PREFIX: &str = "%_SCOPE_";
+const IRQ_FUNCTION_LABEL: &str = "%_IRQ";
+const NMI_FUNCTION_LABEL: &str = "%_NMI";
+const BRK_FUNCTION_LABEL: &str = "%_BRK";
+const JUMP_LABEL_PREFIX: &str = "%_JUMP_";
+const EMPTY_INTERRUPT_LABEL: &str = "%_EMPTY_INTERRUPT";
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum CompileResult<T> {
@@ -332,10 +332,9 @@ fn compile_expression(
             }
         }
         Expression::Identifier(name) => {
-            if state.defines.contains_key(name) {
-                CompileResult::Success(Expression::Identifier(name.clone()))
-            } else {
-                CompileResult::Failure(format!("'{}' is not a defined value", name))
+            match state.defines.get(name) {
+                Some(expr) => compile_expression(expr, identifiers, scope_info, state),
+                None => CompileResult::Failure(format!("'{}' is not a defined value", name)),
             }
         }
         Expression::UnaryOperator(op_type, base_expr) => {

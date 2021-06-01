@@ -73,7 +73,7 @@ impl Display for GeneralPurposeRegister {
                 write!(f, "R{}", i)
             }
             GeneralPurposeRegister::Identifier(name) => {
-                write!(f, "{}", name)
+                write!(f, "${}", name)
             }
         }
     }

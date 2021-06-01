@@ -9,6 +9,8 @@ use nom::multi::*;
 use nom::sequence::*;
 use nom::IResult;
 use std::fmt::Debug;
+use std::fs::File;
+use std::path::{Path, PathBuf};
 
 fn comma_sep(input: &str) -> IResult<&str, (), Error<&str>> {
     discard(delimited(multispace0, char(','), multispace0))(input)
@@ -63,7 +65,7 @@ fn general_purpose_register(input: &str) -> IResult<&str, GeneralPurposeRegister
             }),
             |i| GeneralPurposeRegister::Global(i as usize),
         ),
-        map(identifier, |name| {
+        map(preceded(char('$'), identifier), |name| {
             GeneralPurposeRegister::Identifier(name.to_string())
         }),
     ))(input)
@@ -764,14 +766,14 @@ fn directive(input: &str) -> IResult<&str, Directive, Error<&str>> {
     )(input)
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ParseResult<'a, T> {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ParseResult<T> {
     Success(T),
-    Failure(usize, &'a str),
+    Failure(PathBuf, usize, String),
 }
 
-fn parse_statement(line: &str) -> ParseResult<Statement> {
-    let blank_result = tuple((multispace0, opt(comment), eof))(line);
+fn parse_statement(input_line: &InputLine) -> ParseResult<Statement> {
+    let blank_result = tuple((multispace0, opt(comment), eof))(&input_line.line);
     match blank_result {
         Ok(_) => ParseResult::Success(Statement::Empty),
         Err(_) => {
@@ -785,17 +787,21 @@ fn parse_statement(line: &str) -> ParseResult<Statement> {
                     }),
                 )),
                 tuple((multispace0, opt(comment), eof)),
-            )(line);
+            )(&input_line.line);
 
             match stm_result {
                 Ok((_, stm)) => ParseResult::Success(stm),
-                Err(_) => ParseResult::Failure(0, "Unknown statement"),
+                Err(_) => ParseResult::Failure(
+                    input_line.source.clone(),
+                    input_line.line_number,
+                    "Unknown statement".to_string(),
+                ),
             }
         }
     }
 }
 
-fn parse_function_open(line: &str) -> Option<(String, DisplayableVec<String>)> {
+fn parse_function_open(input_line: &InputLine) -> Option<(String, DisplayableVec<String>)> {
     let result = delimited(
         multispace0,
         tuple((
@@ -814,7 +820,7 @@ fn parse_function_open(line: &str) -> Option<(String, DisplayableVec<String>)> {
             ),
         )),
         tuple((multispace0, opt(comment), eof)),
-    )(line);
+    )(&input_line.line);
     match result {
         Ok((_, (_, _, name, _, params))) => Some((
             name.to_string(),
@@ -824,142 +830,252 @@ fn parse_function_open(line: &str) -> Option<(String, DisplayableVec<String>)> {
     }
 }
 
-fn parse_block_directive(line: &str, tag: &str) -> bool {
+fn parse_block_directive(input_line: &InputLine, tag: &str) -> bool {
     let result = delimited(
         multispace0,
         tag_no_case(tag),
         tuple((multispace0, opt(comment), eof)),
-    )(line);
+    )(&input_line.line);
     match result {
         Ok((_, _)) => true,
         Err(_) => false,
     }
 }
 
-fn parse_function_close(line: &str) -> bool {
-    parse_block_directive(line, ".endfn")
+fn parse_function_close(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".endfn")
 }
 
-fn parse_main_entry_point_open(line: &str) -> bool {
-    parse_block_directive(line, ".main")
+fn parse_main_entry_point_open(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".main")
 }
 
-fn parse_main_entry_point_close(line: &str) -> bool {
-    parse_block_directive(line, ".endmain")
+fn parse_main_entry_point_close(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".endmain")
 }
 
-fn parse_irq_entry_point_open(line: &str) -> bool {
-    parse_block_directive(line, ".irq")
+fn parse_irq_entry_point_open(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".irq")
 }
 
-fn parse_irq_entry_point_close(line: &str) -> bool {
-    parse_block_directive(line, ".endirq")
+fn parse_irq_entry_point_close(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".endirq")
 }
 
-fn parse_nmi_entry_point_open(line: &str) -> bool {
-    parse_block_directive(line, ".nmi")
+fn parse_nmi_entry_point_open(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".nmi")
 }
 
-fn parse_nmi_entry_point_close(line: &str) -> bool {
-    parse_block_directive(line, ".endnmi")
+fn parse_nmi_entry_point_close(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".endnmi")
 }
 
-fn parse_brk_entry_point_open(line: &str) -> bool {
-    parse_block_directive(line, ".brk")
+fn parse_brk_entry_point_open(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".brk")
 }
 
-fn parse_brk_entry_point_close(line: &str) -> bool {
-    parse_block_directive(line, ".endbrk")
+fn parse_brk_entry_point_close(input_line: &InputLine) -> bool {
+    parse_block_directive(input_line, ".endbrk")
 }
 
-pub fn parse_program(asm: &str) -> ParseResult<Program> {
-    let mut prog = Program::new();
+fn parse_include(input_line: &InputLine) -> Option<PathBuf> {
+    let result = delimited(
+        multispace0,
+        preceded(
+            tuple((tag_no_case(".include"), multispace1)),
+            string_literal,
+        ),
+        tuple((multispace0, opt(comment), eof)),
+    )(&input_line.line);
 
-    let lines: Vec<&str> = asm.lines().collect();
-    let mut i = 0;
-    loop {
-        macro_rules! parse_block {
-            ($parse_close_directive:expr) => {{
-                let mut block_body: Vec<Statement> = Vec::new();
-                i += 1;
+    match result {
+        Ok((_, path)) => Some(PathBuf::from(path)),
+        Err(_) => None,
+    }
+}
 
-                loop {
-                    if let Some(sub_line) = lines.get(i) {
-                        if $parse_close_directive(sub_line) {
-                            i += 1;
-                            break;
-                        } else {
-                            let result = parse_statement(sub_line);
-                            match result {
-                                ParseResult::Success(stm) => {
-                                    block_body.push(stm);
-                                    i += 1;
+struct InputLine {
+    line: String,
+    line_number: usize,
+    source: PathBuf,
+}
+impl InputLine {
+    fn new(line: String, line_number: usize, source: PathBuf) -> Self {
+        Self {
+            line,
+            line_number,
+            source,
+        }
+    }
+}
+
+fn read_lines(file_path: &Path) -> ParseResult<Vec<InputLine>> {
+    match File::open(file_path) {
+        Ok(mut file) => {
+            let mut asm = String::new();
+            match file.read_to_string(&mut asm) {
+                Ok(_) => {
+                    let parent_dir = file_path.parent().unwrap();
+                    let mut lines: Vec<InputLine> = asm
+                        .lines()
+                        .enumerate()
+                        .map(|(line_number, line)| {
+                            InputLine::new(line.to_string(), line_number + 1, PathBuf::from(file_path))
+                        })
+                        .collect();
+
+                    let mut i = lines.len();
+                    while i > 0 {
+                        i -= 1;
+
+                        let line = lines.get(i).unwrap();
+                        if let Some(include_path) = parse_include(line) {
+                            let mut full_include_path = PathBuf::new();
+                            full_include_path.push(parent_dir);
+                            full_include_path.push(include_path);
+
+                            match read_lines(&full_include_path) {
+                                ParseResult::Success(sub_lines) => {
+                                    lines = lines.splice(i..=i, sub_lines).collect();
                                 }
-                                ParseResult::Failure(_, msg) => {
-                                    return ParseResult::Failure(i + 1, msg)
+                                ParseResult::Failure(source, row, msg) => {
+                                    return ParseResult::Failure(source, row, msg)
                                 }
                             }
                         }
-                    } else {
-                        return ParseResult::Failure(i + 1, "Function was not closed");
                     }
+                    ParseResult::Success(lines)
                 }
-
-                ParseResult::Success(block_body)
-            }};
+                Err(err) => ParseResult::Failure(
+                    PathBuf::from(file_path),
+                    0,
+                    format!("Unable to read file '{}':\n{}", file_path.display(), err),
+                ),
+            }
         }
+        Err(err) => ParseResult::Failure(
+            PathBuf::from(file_path),
+            0,
+            format!("Unable to open file '{}':\n{}", file_path.display(), err),
+        ),
+    }
+}
 
-        if let Some(line) = lines.get(i) {
-            if let Some((name, params)) = parse_function_open(line) {
-                match parse_block!(parse_function_close) {
-                    ParseResult::Success(body) => {
-                        prog.body
-                            .push(TopLevelStatement::Function(name.to_string(), params, body));
-                    }
-                    ParseResult::Failure(row, msg) => return ParseResult::Failure(row, msg),
-                }
-            } else if parse_main_entry_point_open(line) {
-                match parse_block!(parse_main_entry_point_close) {
-                    ParseResult::Success(body) => {
-                        prog.body.push(TopLevelStatement::MainEntryPoint(body));
-                    }
-                    ParseResult::Failure(row, msg) => return ParseResult::Failure(row, msg),
-                }
-            } else if parse_irq_entry_point_open(line) {
-                match parse_block!(parse_irq_entry_point_close) {
-                    ParseResult::Success(body) => {
-                        prog.body.push(TopLevelStatement::IrqEntryPoint(body));
-                    }
-                    ParseResult::Failure(row, msg) => return ParseResult::Failure(row, msg),
-                }
-            } else if parse_nmi_entry_point_open(line) {
-                match parse_block!(parse_nmi_entry_point_close) {
-                    ParseResult::Success(body) => {
-                        prog.body.push(TopLevelStatement::NmiEntryPoint(body));
-                    }
-                    ParseResult::Failure(row, msg) => return ParseResult::Failure(row, msg),
-                }
-            } else if parse_brk_entry_point_open(line) {
-                match parse_block!(parse_brk_entry_point_close) {
-                    ParseResult::Success(body) => {
-                        prog.body.push(TopLevelStatement::BrkEntryPoint(body));
-                    }
-                    ParseResult::Failure(row, msg) => return ParseResult::Failure(row, msg),
-                }
-            } else {
-                let result = parse_statement(line);
-                match result {
-                    ParseResult::Success(stm) => {
-                        prog.body.push(TopLevelStatement::Statement(stm));
+pub fn parse_file(file_path: &Path) -> ParseResult<Program> {
+    match read_lines(file_path) {
+        ParseResult::Success(lines) => {
+            //for line in lines.iter() {
+            //    println!("{}", line.line);
+            //}
+
+            let mut prog = Program::new();
+
+            let mut i = 0;
+            loop {
+                macro_rules! parse_block {
+                    ($parse_close_directive:expr) => {{
+                        let mut block_body: Vec<Statement> = Vec::new();
                         i += 1;
+
+                        loop {
+                            if let Some(sub_line) = lines.get(i) {
+                                if $parse_close_directive(sub_line) {
+                                    i += 1;
+                                    break;
+                                } else {
+                                    let result = parse_statement(sub_line);
+                                    match result {
+                                        ParseResult::Success(stm) => {
+                                            block_body.push(stm);
+                                            i += 1;
+                                        }
+                                        ParseResult::Failure(source, row, msg) => {
+                                            return ParseResult::Failure(source, row, msg)
+                                        }
+                                    }
+                                }
+                            } else {
+                                return ParseResult::Failure(
+                                    PathBuf::from(file_path),
+                                    i + 1,
+                                    "Function was not closed".to_string(),
+                                );
+                            }
+                        }
+
+                        ParseResult::Success(block_body)
+                    }};
+                }
+
+                if let Some(line) = lines.get(i) {
+                    if let Some((name, params)) = parse_function_open(line) {
+                        match parse_block!(parse_function_close) {
+                            ParseResult::Success(body) => {
+                                prog.body.push(TopLevelStatement::Function(
+                                    name.to_string(),
+                                    params,
+                                    body,
+                                ));
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
+                    } else if parse_main_entry_point_open(line) {
+                        match parse_block!(parse_main_entry_point_close) {
+                            ParseResult::Success(body) => {
+                                prog.body.push(TopLevelStatement::MainEntryPoint(body));
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
+                    } else if parse_irq_entry_point_open(line) {
+                        match parse_block!(parse_irq_entry_point_close) {
+                            ParseResult::Success(body) => {
+                                prog.body.push(TopLevelStatement::IrqEntryPoint(body));
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
+                    } else if parse_nmi_entry_point_open(line) {
+                        match parse_block!(parse_nmi_entry_point_close) {
+                            ParseResult::Success(body) => {
+                                prog.body.push(TopLevelStatement::NmiEntryPoint(body));
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
+                    } else if parse_brk_entry_point_open(line) {
+                        match parse_block!(parse_brk_entry_point_close) {
+                            ParseResult::Success(body) => {
+                                prog.body.push(TopLevelStatement::BrkEntryPoint(body));
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
+                    } else {
+                        let result = parse_statement(line);
+                        match result {
+                            ParseResult::Success(stm) => {
+                                prog.body.push(TopLevelStatement::Statement(stm));
+                                i += 1;
+                            }
+                            ParseResult::Failure(source, row, msg) => {
+                                return ParseResult::Failure(source, row, msg)
+                            }
+                        }
                     }
-                    ParseResult::Failure(_, msg) => return ParseResult::Failure(i + 1, msg),
+                } else {
+                    break;
                 }
             }
-        } else {
-            break;
-        }
-    }
 
-    ParseResult::Success(prog)
+            ParseResult::Success(prog)
+        }
+        ParseResult::Failure(source, row, msg) => ParseResult::Failure(source, row, msg),
+    }
 }

@@ -689,63 +689,53 @@ fn expression(input: &str) -> IResult<&str, Expression, Error<&str>> {
 }
 
 fn compile_and_assemble(input_path: &Path, output_path: &Path) {
-    match File::open(input_path) {
-        Ok(mut input_file) => {
-            let mut asm = String::new();
-            match input_file.read_to_string(&mut asm) {
-                Ok(_) => {
-                    let result = T816::grammar::parse_program(&asm);
-                    match result {
-                        T816::grammar::ParseResult::Success(prog) => {
-                            println!("{}", prog);
+    let result = T816::grammar::parse_file(input_path);
+    match result {
+        T816::grammar::ParseResult::Success(prog) => {
+            println!("{}", prog);
 
-                            let comp_result = T816::compile::compile_program(&prog);
-                            match comp_result {
-                                T816::compile::CompileResult::Success(comp_prog) => {
-                                    println!("{}", comp_prog);
+            let comp_result = T816::compile::compile_program(&prog);
+            match comp_result {
+                T816::compile::CompileResult::Success(comp_prog) => {
+                    println!("{}", comp_prog);
 
-                                    let assembly = W65C816::assemble_program(&comp_prog);
-                                    match File::create(output_path) {
-                                        Ok(mut output_file) => {
-                                            match output_file.write_all(&assembly.0) {
-                                                Ok(_) => {
-                                                    println!("Program successfully compiled and assembled to '{}'", output_path.display());
-                                                }
-                                                Err(msg) => {
-                                                    println!(
-                                                        "Unable to write to file '{}':\n{}",
-                                                        output_path.display(),
-                                                        msg
-                                                    );
-                                                }
-                                            }
-                                        }
-                                        Err(msg) => {
-                                            println!(
-                                                "Unable to create file '{}':\n{}",
-                                                output_path.display(),
-                                                msg
-                                            );
-                                        }
-                                    }
-                                }
-                                T816::compile::CompileResult::Failure(msg) => {
-                                    println!("Compile error:\n{}", msg)
-                                }
+                    let assembly = W65C816::assemble_program(&comp_prog);
+                    match File::create(output_path) {
+                        Ok(mut output_file) => match output_file.write_all(&assembly.0) {
+                            Ok(_) => {
+                                println!(
+                                    "Program successfully compiled and assembled to '{}'",
+                                    output_path.display()
+                                );
                             }
-                        }
-                        T816::grammar::ParseResult::Failure(line, msg) => {
-                            println!("Parse error in line {}:\n{}", line, msg)
+                            Err(msg) => {
+                                println!(
+                                    "Unable to write to file '{}':\n{}",
+                                    output_path.display(),
+                                    msg
+                                );
+                            }
+                        },
+                        Err(msg) => {
+                            println!(
+                                "Unable to create file '{}':\n{}",
+                                output_path.display(),
+                                msg
+                            );
                         }
                     }
                 }
-                Err(msg) => {
-                    println!("Unable to read file '{}':\n{}", input_path.display(), msg);
+                T816::compile::CompileResult::Failure(msg) => {
+                    println!("Compile error:\n{}", msg)
                 }
             }
         }
-        Err(msg) => {
-            println!("Unable to open file '{}':\n{}", input_path.display(), msg);
+        T816::grammar::ParseResult::Failure(source, line, msg) => {
+            if line == 0 {
+                println!("{}", msg)
+            } else {
+                println!("Parse error in '{}' line {}:\n{}", source.display(), line, msg)
+            }
         }
     }
 }
