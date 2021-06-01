@@ -692,12 +692,12 @@ fn compile_and_assemble(input_path: &Path, output_path: &Path) {
     let result = T816::grammar::parse_file(input_path);
     match result {
         T816::grammar::ParseResult::Success(prog) => {
-            println!("{}", prog);
+            //println!("{}", prog);
 
             let comp_result = T816::compile::compile_program(&prog);
             match comp_result {
                 T816::compile::CompileResult::Success(comp_prog) => {
-                    println!("{}", comp_prog);
+                    //println!("{}", comp_prog);
 
                     let assembly = W65C816::assemble_program(&comp_prog);
                     match File::create(output_path) {

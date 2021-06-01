@@ -964,10 +964,6 @@ fn read_lines(file_path: &Path) -> ParseResult<Vec<InputLine>> {
 pub fn parse_file(file_path: &Path) -> ParseResult<Program> {
     match read_lines(file_path) {
         ParseResult::Success(lines) => {
-            //for line in lines.iter() {
-            //    println!("{}", line.line);
-            //}
-
             let mut prog = Program::new();
 
             let mut i = 0;
