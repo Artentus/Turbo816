@@ -936,7 +936,7 @@ fn read_lines(file_path: &Path) -> ParseResult<Vec<InputLine>> {
 
                             match read_lines(&full_include_path) {
                                 ParseResult::Success(sub_lines) => {
-                                    lines = lines.splice(i..=i, sub_lines).collect();
+                                    lines.splice(i..=i, sub_lines);
                                 }
                                 ParseResult::Failure(source, row, msg) => {
                                     return ParseResult::Failure(source, row, msg)
