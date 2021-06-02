@@ -304,6 +304,7 @@ fn compile_expression(
 ) -> CompileResult<Expression> {
     match expr {
         Expression::Literal(value) => CompileResult::Success(Expression::Literal(*value)),
+        Expression::Char(c) => CompileResult::Success(Expression::Char(*c)),
         Expression::Label(name) => {
             if identifiers.contains(name) {
                 if identifiers.labels.contains(name) {

@@ -15,6 +15,9 @@
 			"include": "#strings"
 		},
 		{
+			"include": "#chars"
+		},
+		{
 			"include": "#comments"
 		}
 	],
@@ -71,6 +74,17 @@
 				{
 					"name": "constant.character.escape.turbo816",
 					"match": "\\\\n|\\\\r|\\\\t|\\\\\\\\|\\\\\"|\\\\u([0-9A-Fa-f]){4,4}"
+				}
+			]
+		},
+		"chars": {
+			"name": "string.quoted.single.turbo816",
+			"begin": "'",
+			"end": "'",
+			"patterns": [
+				{
+					"name": "constant.character.escape.turbo816",
+					"match": "\\\\n|\\\\r|\\\\t|\\\\\\\\|\\\\'|\\\\u([0-9A-Fa-f]){4,4}"
 				}
 			]
 		},

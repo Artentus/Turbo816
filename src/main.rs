@@ -296,6 +296,43 @@ fn string_literal(input: &str) -> IResult<&str, String, Error<&str>> {
     )(input)
 }
 
+fn char_literal(input: &str) -> IResult<&str, char, Error<&str>> {
+    fn unescaped_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        satisfy(|c| (c != '\'') && (c != '\\'))(input)
+    }
+
+    fn escaped_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        alt((
+            then_return(tag("\\'"), '\''),
+            then_return(tag("\\\\"), '\\'),
+            then_return(tag("\\n"), '\n'),
+            then_return(tag("\\r"), '\r'),
+            then_return(tag("\\t"), '\t'),
+        ))(input)
+    }
+
+    fn unicode_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        map(
+            preceded(tag("\\u"), count(hexadecimal_digit, 4)),
+            |digits| {
+                let hex: String = digits.iter().collect();
+                let value = u16::from_str_radix(&hex, 16).unwrap();
+                let result = char::decode_utf16(std::iter::once(value))
+                    .into_iter()
+                    .next()
+                    .unwrap();
+                result.unwrap_or(char::REPLACEMENT_CHARACTER)
+            },
+        )(input)
+    }
+
+    fn valid_char(input: &str) -> IResult<&str, char, Error<&str>> {
+        alt((unescaped_char, escaped_char, unicode_char))(input)
+    }
+
+    delimited(char('\''), valid_char, char('\''))(input)
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum UnaryOperatorType {
     Positive,
@@ -320,6 +357,7 @@ pub enum BinaryOperatorType {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression {
     Literal(Wrapping<isize>),
+    Char(char),
     Label(String),
     Identifier(String),
     UnaryOperator(UnaryOperatorType, Box<Expression>),
@@ -336,6 +374,9 @@ impl Expression {
     ) -> std::fmt::Result {
         match self {
             Expression::Literal(value) => format_number(f, value),
+            Expression::Char(c) => {
+                write!(f, "'{}'", c)
+            }
             Expression::Label(name) => {
                 write!(f, "@{}", name)
             }
@@ -407,6 +448,9 @@ impl Expression {
                 3 => format!("0x{0:0>6X}", value.0 & 0x00FFFFFF),
                 _ => format!("0x{0:0>1$X}", value.0, byte_size * 2),
             },
+            Expression::Char(c) => {
+                format!("'{}'", c)
+            }
             Expression::Label(name) => {
                 if add_at_symbol {
                     format!("@{}", name)
@@ -678,6 +722,7 @@ fn sub_expression(input: &str) -> IResult<&str, Expression, Error<&str>> {
             delimited(multispace0, expression, multispace0),
             char(')'),
         ),
+        map(char_literal, |c| Expression::Char(c)),
         map(identifier, |name| Expression::Identifier(name.to_string())),
         label,
         number_literal,

@@ -1304,6 +1304,7 @@ impl Display for Program {
 fn resolve_origin_expression(expr: &Expression) -> Wrapping<isize> {
     match expr {
         Expression::Literal(value) => *value,
+        Expression::Char(c) => Wrapping((*c as u32) as isize),
         Expression::Label(_) => Wrapping(0),
         Expression::Identifier(_) => unreachable!(),
         Expression::UnaryOperator(op_type, base_expr) => {
@@ -1351,6 +1352,7 @@ fn assign_label_values(prog: &Program) -> HashMap<&str, isize> {
 fn resolve_expression(expr: &Expression, label_values: &HashMap<&str, isize>) -> Wrapping<isize> {
     match expr {
         Expression::Literal(value) => *value,
+        Expression::Char(c) => Wrapping((*c as u32) as isize),
         Expression::Label(name) => {
             let n: &str = name;
             Wrapping(*label_values.get(&n).unwrap() as isize)
