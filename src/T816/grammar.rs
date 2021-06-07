@@ -102,9 +102,7 @@ fn register_indirect(input: &str) -> IResult<&str, GeneralPurposeRegister, Error
     )(input)
 }
 
-fn register_indirect_indexed(
-    input: &str,
-) -> IResult<&str, (GeneralPurposeRegister, IndexRegister), Error<&str>> {
+fn register_indirect_indexed(input: &str) -> IResult<&str, GeneralPurposeRegister, Error<&str>> {
     map(
         tuple((
             delimited(
@@ -113,9 +111,9 @@ fn register_indirect_indexed(
                 char(']'),
             ),
             colon_sep,
-            index_register,
+            one_of("yY"),
         )),
-        |(r, _, i)| (r, i),
+        |(r, _, _)| r,
     )(input)
 }
 
@@ -144,6 +142,32 @@ fn absolute_indexed_indirect(
     )(input)
 }
 
+fn stack_relative(input: &str) -> IResult<&str, Expression, Error<&str>> {
+    map(
+        tuple((expression, colon_sep, tag_no_case("SP"))),
+        |(o, _, _)| o,
+    )(input)
+}
+
+fn stack_relative_indirect_indexed(input: &str) -> IResult<&str, Expression, Error<&str>> {
+    map(
+        tuple((
+            delimited(
+                char('['),
+                delimited(
+                    multispace0,
+                    tuple((expression, colon_sep, tag_no_case("SP"))),
+                    multispace0,
+                ),
+                char(']'),
+            ),
+            colon_sep,
+            one_of("yY"),
+        )),
+        |((o, _, _), _, _)| o,
+    )(input)
+}
+
 fn transfer_arg(input: &str) -> IResult<&str, TransferArg, Error<&str>> {
     alt((
         map(index_register, |r| TransferArg::IndexRegister(r)),
@@ -156,29 +180,35 @@ fn transfer_arg(input: &str) -> IResult<&str, TransferArg, Error<&str>> {
     ))(input)
 }
 
-fn load_word_source(input: &str) -> IResult<&str, LoadWordSource, Error<&str>> {
+fn load_source(input: &str) -> IResult<&str, LoadSource, Error<&str>> {
     alt((
-        map(immediate, |v| LoadWordSource::Immediate(v)),
-        map(absolute_indexed, |(a, i)| {
-            LoadWordSource::AbsoluteIndexed(a, i)
+        map(immediate, |v| LoadSource::Immediate(v)),
+        map(stack_relative, |o| LoadSource::StackRelative(o)),
+        map(absolute_indexed, |(a, i)| LoadSource::AbsoluteIndexed(a, i)),
+        map(absolute, |a| LoadSource::Absolute(a)),
+        map(stack_relative_indirect_indexed, |o| {
+            LoadSource::StackRelativeIndirectIndexed(o)
         }),
-        map(absolute, |a| LoadWordSource::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            LoadWordSource::RegisterIndirectIndexed(r, i)
+        map(register_indirect_indexed, |r| {
+            LoadSource::RegisterIndirectIndexed(r)
         }),
-        map(register_indirect, |r| LoadWordSource::RegisterIndirect(r)),
+        map(register_indirect, |r| LoadSource::RegisterIndirect(r)),
     ))(input)
 }
 
 fn load_byte_source(input: &str) -> IResult<&str, LoadByteSource, Error<&str>> {
     alt((
         map(immediate, |v| LoadByteSource::Immediate(v)),
+        map(stack_relative, |o| LoadByteSource::StackRelative(o)),
         map(absolute_indexed, |(a, i)| {
             LoadByteSource::AbsoluteIndexed(a, i)
         }),
         map(absolute, |a| LoadByteSource::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            LoadByteSource::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            LoadByteSource::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            LoadByteSource::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| LoadByteSource::RegisterIndirect(r)),
     ))(input)
@@ -205,12 +235,16 @@ fn store_source(input: &str) -> IResult<&str, StoreSource, Error<&str>> {
 
 fn store_target(input: &str) -> IResult<&str, StoreTarget, Error<&str>> {
     alt((
+        map(stack_relative, |o| StoreTarget::StackRelative(o)),
         map(absolute_indexed, |(a, i)| {
             StoreTarget::AbsoluteIndexed(a, i)
         }),
         map(absolute, |a| StoreTarget::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            StoreTarget::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            StoreTarget::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            StoreTarget::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| StoreTarget::RegisterIndirect(r)),
     ))(input)
@@ -247,10 +281,14 @@ fn alu_source(input: &str) -> IResult<&str, AluSource, Error<&str>> {
             AluSource::GeneralPurposeRegister(r)
         }),
         map(immediate, |v| AluSource::Immediate(v)),
+        map(stack_relative, |o| AluSource::StackRelative(o)),
         map(absolute_indexed, |(a, i)| AluSource::AbsoluteIndexed(a, i)),
         map(absolute, |a| AluSource::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            AluSource::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            AluSource::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            AluSource::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| AluSource::RegisterIndirect(r)),
     ))(input)
@@ -261,10 +299,14 @@ fn alu_target(input: &str) -> IResult<&str, AluTarget, Error<&str>> {
         map(general_purpose_register, |r| {
             AluTarget::GeneralPurposeRegister(r)
         }),
+        map(stack_relative, |o| AluTarget::StackRelative(o)),
         map(absolute_indexed, |(a, i)| AluTarget::AbsoluteIndexed(a, i)),
         map(absolute, |a| AluTarget::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            AluTarget::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            AluTarget::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            AluTarget::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| AluTarget::RegisterIndirect(r)),
     ))(input)
@@ -295,12 +337,16 @@ fn compare_with_source(input: &str) -> IResult<&str, CompareWithSource, Error<&s
             CompareWithSource::GeneralPurposeRegister(r)
         }),
         map(immediate, |v| CompareWithSource::Immediate(v)),
+        map(stack_relative, |o| CompareWithSource::StackRelative(o)),
         map(absolute_indexed, |(a, i)| {
             CompareWithSource::AbsoluteIndexed(a, i)
         }),
         map(absolute, |a| CompareWithSource::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            CompareWithSource::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            CompareWithSource::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            CompareWithSource::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| {
             CompareWithSource::RegisterIndirect(r)
@@ -347,8 +393,8 @@ fn bit_test_with_source(input: &str) -> IResult<&str, BitTestWithSource, Error<&
             BitTestWithSource::AbsoluteIndexed(a, i)
         }),
         map(absolute, |a| BitTestWithSource::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            BitTestWithSource::RegisterIndirectIndexed(r, i)
+        map(register_indirect_indexed, |r| {
+            BitTestWithSource::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| {
             BitTestWithSource::RegisterIndirect(r)
@@ -358,9 +404,7 @@ fn bit_test_with_source(input: &str) -> IResult<&str, BitTestWithSource, Error<&
 
 fn test_source(input: &str) -> IResult<&str, TestSource, Error<&str>> {
     alt((
-        map(index_register, |r| {
-            TestSource::IndexRegister(r)
-        }),
+        map(index_register, |r| TestSource::IndexRegister(r)),
         map(general_purpose_register, |r| {
             TestSource::GeneralPurposeRegister(r)
         }),
@@ -382,26 +426,6 @@ fn instruction(input: &str) -> IResult<&str, Instruction, Error<&str>> {
             ),
             map(
                 tuple((
-                    tag_no_case("LDW"),
-                    multispace1,
-                    load_target,
-                    left_arrow_sep,
-                    load_word_source,
-                )),
-                |(_, _, t, _, s)| Instruction::LoadWord(t, s),
-            ),
-            map(
-                tuple((
-                    tag_no_case("STW"),
-                    multispace1,
-                    store_source,
-                    right_arrow_sep,
-                    store_target,
-                )),
-                |(_, _, s, _, t)| Instruction::StoreWord(s, t),
-            ),
-            map(
-                tuple((
                     tag_no_case("LDB"),
                     multispace1,
                     load_target,
@@ -419,6 +443,26 @@ fn instruction(input: &str) -> IResult<&str, Instruction, Error<&str>> {
                     store_target,
                 )),
                 |(_, _, s, _, t)| Instruction::StoreByte(s, t),
+            ),
+            map(
+                tuple((
+                    tag_no_case("LD"),
+                    multispace1,
+                    load_target,
+                    left_arrow_sep,
+                    load_source,
+                )),
+                |(_, _, t, _, s)| Instruction::Load(t, s),
+            ),
+            map(
+                tuple((
+                    tag_no_case("ST"),
+                    multispace1,
+                    store_source,
+                    right_arrow_sep,
+                    store_target,
+                )),
+                |(_, _, s, _, t)| Instruction::Store(s, t),
             ),
             map(
                 tuple((tag_no_case("PUSH"), multispace1, stack_arg)),
@@ -676,11 +720,7 @@ fn instruction(input: &str) -> IResult<&str, Instruction, Error<&str>> {
             |(_, _, l, _, r)| Instruction::BitTest(l, r),
         ),
         map(
-            tuple((
-                tag_no_case("TEST"),
-                multispace1,
-                test_source,
-            )),
+            tuple((tag_no_case("TEST"), multispace1, test_source)),
             |(_, _, s)| Instruction::Test(s),
         ),
         map(tag_no_case("BRK"), |_| Instruction::SoftwareInterrupt),
@@ -695,10 +735,14 @@ fn parameter(input: &str) -> IResult<&str, Parameter, Error<&str>> {
             Parameter::GeneralPurposeRegister(r)
         }),
         map(immediate, |v| Parameter::Immediate(v)),
+        map(stack_relative, |o| Parameter::StackRelative(o)),
         map(absolute_indexed, |(a, i)| Parameter::AbsoluteIndexed(a, i)),
         map(absolute, |a| Parameter::Absolute(a)),
-        map(register_indirect_indexed, |(r, i)| {
-            Parameter::RegisterIndirectIndexed(r, i)
+        map(stack_relative_indirect_indexed, |o| {
+            Parameter::StackRelativeIndirectIndexed(o)
+        }),
+        map(register_indirect_indexed, |r| {
+            Parameter::RegisterIndirectIndexed(r)
         }),
         map(register_indirect, |r| Parameter::RegisterIndirect(r)),
     ))(input)
@@ -939,7 +983,11 @@ fn read_lines(file_path: &Path) -> ParseResult<Vec<InputLine>> {
                         .lines()
                         .enumerate()
                         .map(|(line_number, line)| {
-                            InputLine::new(line.to_string(), line_number + 1, PathBuf::from(file_path))
+                            InputLine::new(
+                                line.to_string(),
+                                line_number + 1,
+                                PathBuf::from(file_path),
+                            )
                         })
                         .collect();
 

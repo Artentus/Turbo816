@@ -151,13 +151,13 @@ pub enum Instruction {
     LdaStackRelative(Expression),
     LdaStackRelativeIndirectIndexedY(Expression),
 
-    LdxImmediate(Expression),
+    LdxImmediate(Expression, bool),
     LdxAbsolute(Expression),
     LdxDirectPage(Expression),
     LdxAbsoluteIndexedY(Expression),
     LdxDirectPageIndexedY(Expression),
 
-    LdyImmediate(Expression),
+    LdyImmediate(Expression, bool),
     LdyAbsolute(Expression),
     LdyDirectPage(Expression),
     LdyAbsoluteIndexedX(Expression),
@@ -436,13 +436,7 @@ impl Instruction {
             Instruction::JsrAbsoluteIndexedXIndirect(_) => 3,
             Instruction::JslAbsoluteLong(_) => 4,
 
-            Instruction::LdaImmediate(_, is_byte) => {
-                if *is_byte {
-                    2
-                } else {
-                    3
-                }
-            }
+            Instruction::LdaImmediate(_, _) => 3,
             Instruction::LdaAbsolute(_) => 3,
             Instruction::LdaAbsoluteLong(_) => 4,
             Instruction::LdaDirectPage(_) => 2,
@@ -458,13 +452,13 @@ impl Instruction {
             Instruction::LdaStackRelative(_) => 2,
             Instruction::LdaStackRelativeIndirectIndexedY(_) => 2,
 
-            Instruction::LdxImmediate(_) => 3,
+            Instruction::LdxImmediate(_, _) => 3,
             Instruction::LdxAbsolute(_) => 3,
             Instruction::LdxDirectPage(_) => 2,
             Instruction::LdxAbsoluteIndexedY(_) => 3,
             Instruction::LdxDirectPageIndexedY(_) => 2,
 
-            Instruction::LdyImmediate(_) => 3,
+            Instruction::LdyImmediate(_, _) => 3,
             Instruction::LdyAbsolute(_) => 3,
             Instruction::LdyDirectPage(_) => 2,
             Instruction::LdyAbsoluteIndexedX(_) => 3,
@@ -933,7 +927,11 @@ impl Display for Instruction {
                 write!(f, "LDA ({},S),Y", expr.to_hex(1, false))
             }
 
-            Instruction::LdxImmediate(expr) => write!(f, "LDX #{}", expr.to_hex(2, false)),
+            Instruction::LdxImmediate(expr, byte_mode) => write!(
+                f,
+                "LDX #{}",
+                expr.to_hex(if *byte_mode { 1 } else { 2 }, false)
+            ),
             Instruction::LdxAbsolute(expr) => write!(f, "LDX {}", expr.to_hex(2, false)),
             Instruction::LdxDirectPage(expr) => write!(f, "LDX {}", expr.to_hex(1, false)),
             Instruction::LdxAbsoluteIndexedY(expr) => {
@@ -943,7 +941,11 @@ impl Display for Instruction {
                 write!(f, "LDX {},Y", expr.to_hex(1, false))
             }
 
-            Instruction::LdyImmediate(expr) => write!(f, "LDY #{}", expr.to_hex(2, false)),
+            Instruction::LdyImmediate(expr, byte_mode) => write!(
+                f,
+                "LDY #{}",
+                expr.to_hex(if *byte_mode { 1 } else { 2 }, false)
+            ),
             Instruction::LdyAbsolute(expr) => write!(f, "LDY {}", expr.to_hex(2, false)),
             Instruction::LdyDirectPage(expr) => write!(f, "LDY {}", expr.to_hex(1, false)),
             Instruction::LdyAbsoluteIndexedX(expr) => {
@@ -1409,6 +1411,11 @@ fn assemble_arg_2(op_code: u8, arg: &Expression, label_values: &HashMap<&str, is
     vec![op_code, l, h]
 }
 
+fn assemble_arg_2l(op_code: u8, arg: &Expression, label_values: &HashMap<&str, isize>) -> Vec<u8> {
+    let l = resolve_u8(arg, label_values);
+    vec![op_code, l, 0]
+}
+
 fn assemble_arg_3(op_code: u8, arg: &Expression, label_values: &HashMap<&str, isize>) -> Vec<u8> {
     let a = resolve_u24(arg, label_values);
     let l = (a & 0x0000FF) as u8;
@@ -1641,7 +1648,7 @@ fn assemble_instruction(
 
         Instruction::LdaImmediate(value, is_byte) => {
             if *is_byte {
-                assemble_arg_1(0xA9, value, label_values)
+                assemble_arg_2l(0xA9, value, label_values)
             } else {
                 assemble_arg_2(0xA9, value, label_values)
             }
@@ -1669,13 +1676,25 @@ fn assemble_instruction(
             assemble_arg_1(0xB3, offset, label_values)
         }
 
-        Instruction::LdxImmediate(value) => assemble_arg_2(0xA2, value, label_values),
+        Instruction::LdxImmediate(value, is_byte) => {
+            if *is_byte {
+                assemble_arg_2l(0xA2, value, label_values)
+            } else {
+                assemble_arg_2(0xA2, value, label_values)
+            }
+        }
         Instruction::LdxAbsolute(addr) => assemble_arg_2(0xAE, addr, label_values),
         Instruction::LdxDirectPage(addr) => assemble_arg_1(0xA6, addr, label_values),
         Instruction::LdxAbsoluteIndexedY(addr) => assemble_arg_2(0xBE, addr, label_values),
         Instruction::LdxDirectPageIndexedY(addr) => assemble_arg_1(0xB6, addr, label_values),
 
-        Instruction::LdyImmediate(value) => assemble_arg_2(0xA0, value, label_values),
+        Instruction::LdyImmediate(value, is_byte) => {
+            if *is_byte {
+                assemble_arg_2l(0xA0, value, label_values)
+            } else {
+                assemble_arg_2(0xA0, value, label_values)
+            }
+        }
         Instruction::LdyAbsolute(addr) => assemble_arg_2(0xAC, addr, label_values),
         Instruction::LdyDirectPage(addr) => assemble_arg_1(0xA4, addr, label_values),
         Instruction::LdyAbsoluteIndexedX(addr) => assemble_arg_2(0xBC, addr, label_values),

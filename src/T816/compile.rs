@@ -332,12 +332,10 @@ fn compile_expression(
                 }
             }
         }
-        Expression::Identifier(name) => {
-            match state.defines.get(name) {
-                Some(expr) => compile_expression(expr, identifiers, scope_info, state),
-                None => CompileResult::Failure(format!("'{}' is not a defined value", name)),
-            }
-        }
+        Expression::Identifier(name) => match state.defines.get(name) {
+            Some(expr) => compile_expression(expr, identifiers, scope_info, state),
+            None => CompileResult::Failure(format!("'{}' is not a defined value", name)),
+        },
         Expression::UnaryOperator(op_type, base_expr) => {
             match compile_expression(base_expr, identifiers, scope_info, state) {
                 CompileResult::Success(comp_expr) => {
@@ -634,9 +632,9 @@ fn compile_transfer_instruction(
     CompileResult::Success(result)
 }
 
-fn compile_load_word_instruction(
+fn compile_load_instruction(
     target: &LoadTarget,
-    source: &LoadWordSource,
+    source: &LoadSource,
     identifiers: &IdentifierCollection,
     scope_info: Option<(&str, &BlockIdentifierCollection)>,
     state: &CompileState,
@@ -652,15 +650,15 @@ fn compile_load_word_instruction(
     match target {
         LoadTarget::IndexRegister(ti) => match ti {
             IndexRegister::X => match source {
-                LoadWordSource::Immediate(value) => {
+                LoadSource::Immediate(value) => {
                     match compile_expression(value, identifiers, scope_info, state) {
                         CompileResult::Success(comp_value) => {
-                            add_instruction!(W65C816::Instruction::LdxImmediate(comp_value));
+                            add_instruction!(W65C816::Instruction::LdxImmediate(comp_value, false));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::Absolute(addr) => {
+                LoadSource::Absolute(addr) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => {
                             add_instruction!(W65C816::Instruction::LdxAbsolute(comp_addr));
@@ -668,7 +666,7 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::AbsoluteIndexed(addr, index) => {
+                LoadSource::AbsoluteIndexed(addr, index) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => match index {
                             IndexRegister::X => {
@@ -686,7 +684,7 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::RegisterIndirect(reg) => {
+                LoadSource::RegisterIndirect(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
@@ -696,41 +694,39 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::RegisterIndirectIndexed(reg, index) => {
+                LoadSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                             add_instruction!(W65C816::Instruction::TaxImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
+                LoadSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                    add_instruction!(W65C816::Instruction::TaxImplied);
+                }
+                LoadSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(W65C816::Instruction::TaxImplied);
+                }
             },
             IndexRegister::Y => match source {
-                LoadWordSource::Immediate(value) => {
+                LoadSource::Immediate(value) => {
                     match compile_expression(value, identifiers, scope_info, state) {
                         CompileResult::Success(comp_value) => {
-                            add_instruction!(W65C816::Instruction::LdyImmediate(comp_value));
+                            add_instruction!(W65C816::Instruction::LdyImmediate(comp_value, false));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::Absolute(addr) => {
+                LoadSource::Absolute(addr) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => {
                             add_instruction!(W65C816::Instruction::LdyAbsolute(comp_addr));
@@ -738,7 +734,7 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::AbsoluteIndexed(addr, index) => {
+                LoadSource::AbsoluteIndexed(addr, index) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => match index {
                             IndexRegister::X => {
@@ -756,7 +752,7 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::RegisterIndirect(reg) => {
+                LoadSource::RegisterIndirect(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
@@ -766,27 +762,27 @@ fn compile_load_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadWordSource::RegisterIndirectIndexed(reg, index) => {
+                LoadSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                             add_instruction!(W65C816::Instruction::TayImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                LoadSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                    add_instruction!(W65C816::Instruction::TayImplied);
+                }
+                LoadSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(W65C816::Instruction::TayImplied);
                 }
             },
         },
@@ -794,7 +790,7 @@ fn compile_load_word_instruction(
             let taddr_opt = get_register_address(tgp, &state.reg_defines);
             match taddr_opt {
                 CompileResult::Success(taddr) => match source {
-                    LoadWordSource::Immediate(value) => {
+                    LoadSource::Immediate(value) => {
                         if *value == ZERO {
                             add_instruction!(W65C816::Instruction::StzDirectPage(taddr));
                         } else {
@@ -809,7 +805,7 @@ fn compile_load_word_instruction(
                             }
                         }
                     }
-                    LoadWordSource::Absolute(addr) => {
+                    LoadSource::Absolute(addr) => {
                         match compile_expression(addr, identifiers, scope_info, state) {
                             CompileResult::Success(comp_addr) => {
                                 add_instruction!(W65C816::Instruction::LdaAbsolute(comp_addr));
@@ -818,7 +814,7 @@ fn compile_load_word_instruction(
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
                     }
-                    LoadWordSource::AbsoluteIndexed(addr, index) => {
+                    LoadSource::AbsoluteIndexed(addr, index) => {
                         match compile_expression(addr, identifiers, scope_info, state) {
                             CompileResult::Success(comp_addr) => match index {
                                 IndexRegister::X => {
@@ -837,7 +833,7 @@ fn compile_load_word_instruction(
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
                     }
-                    LoadWordSource::RegisterIndirect(reg) => {
+                    LoadSource::RegisterIndirect(reg) => {
                         let addr_opt = get_register_address(reg, &state.reg_defines);
                         match addr_opt {
                             CompileResult::Success(addr) => {
@@ -847,28 +843,27 @@ fn compile_load_word_instruction(
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
                     }
-                    LoadWordSource::RegisterIndirectIndexed(reg, index) => {
+                    LoadSource::RegisterIndirectIndexed(reg) => {
                         let addr_opt = get_register_address(reg, &state.reg_defines);
                         match addr_opt {
-                            CompileResult::Success(addr) => match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                    add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
-                                }
-                            },
+                            CompileResult::Success(addr) => {
+                                add_instruction!(
+                                    W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
+                                );
+                                add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
+                            }
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
+                    }
+                    LoadSource::StackRelative(offset) => {
+                        add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                        add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
+                    }
+                    LoadSource::StackRelativeIndirectIndexed(offset) => {
+                        add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                            offset.clone()
+                        ));
+                        add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                     }
                 },
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -879,7 +874,7 @@ fn compile_load_word_instruction(
     CompileResult::Success(result)
 }
 
-fn compile_store_word_instruction(
+fn compile_store_instruction(
     source: &StoreSource,
     target: &StoreTarget,
     identifiers: &IdentifierCollection,
@@ -935,29 +930,27 @@ fn compile_store_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
                             add_instruction!(W65C816::Instruction::TxaImplied);
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             },
             IndexRegister::Y => match target {
@@ -999,28 +992,27 @@ fn compile_store_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
                             add_instruction!(W65C816::Instruction::TyaImplied);
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::TayImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             },
         },
@@ -1066,30 +1058,28 @@ fn compile_store_word_instruction(
                                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                             }
                         }
-                        StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                        StoreTarget::RegisterIndirectIndexed(reg) => {
                             let addr_opt = get_register_address(reg, &state.reg_defines);
                             match addr_opt {
-                                CompileResult::Success(addr) => match index {
-                                    IndexRegister::X => {
-                                        add_instruction!(W65C816::Instruction::PhyImplied);
-                                        add_instruction!(W65C816::Instruction::TxyImplied);
-                                        add_instruction!(
-                                            W65C816::Instruction::StaDirectPageIndirectIndexedY(
-                                                addr
-                                            )
-                                        );
-                                        add_instruction!(W65C816::Instruction::PlyImplied);
-                                    }
-                                    IndexRegister::Y => {
-                                        add_instruction!(
-                                            W65C816::Instruction::StaDirectPageIndirectIndexedY(
-                                                addr
-                                            )
-                                        );
-                                    }
-                                },
+                                CompileResult::Success(addr) => {
+                                    add_instruction!(
+                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
+                                    );
+                                }
                                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                             }
+                        }
+                        StoreTarget::StackRelative(offset) => {
+                            add_instruction!(W65C816::Instruction::StaStackRelative(
+                                offset.clone()
+                            ));
+                        }
+                        StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                            add_instruction!(
+                                W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                                    offset.clone()
+                                )
+                            );
                         }
                     }
                 }
@@ -1139,26 +1129,24 @@ fn compile_store_word_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
-                        CompileResult::Success(addr) => match index {
-                            IndexRegister::X => {
-                                add_instruction!(W65C816::Instruction::PhyImplied);
-                                add_instruction!(W65C816::Instruction::TxyImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                );
-                                add_instruction!(W65C816::Instruction::PlyImplied);
-                            }
-                            IndexRegister::Y => {
-                                add_instruction!(
-                                    W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                );
-                            }
-                        },
+                        CompileResult::Success(addr) => {
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                        }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             }
         }
@@ -1188,10 +1176,7 @@ fn compile_load_byte_instruction(
                 LoadByteSource::Immediate(value) => {
                     match compile_expression(value, identifiers, scope_info, state) {
                         CompileResult::Success(comp_value) => {
-                            add_instruction!(set_m_short!());
-                            add_instruction!(W65C816::Instruction::LdaImmediate(comp_value, true));
-                            add_instruction!(set_m_long!());
-                            add_instruction!(W65C816::Instruction::TaxImplied);
+                            add_instruction!(W65C816::Instruction::LdxImmediate(comp_value, true));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
@@ -1199,9 +1184,8 @@ fn compile_load_byte_instruction(
                 LoadByteSource::Absolute(addr) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => {
-                            add_instruction!(set_m_short!());
                             add_instruction!(W65C816::Instruction::LdaAbsolute(comp_addr));
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TaxImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -1211,19 +1195,21 @@ fn compile_load_byte_instruction(
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => match index {
                             IndexRegister::X => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedX(
                                     comp_addr
                                 ));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::TaxImplied);
                             }
                             IndexRegister::Y => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedY(
                                     comp_addr
                                 ));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::TaxImplied);
                             }
                         },
@@ -1234,49 +1220,44 @@ fn compile_load_byte_instruction(
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            add_instruction!(set_m_short!());
                             add_instruction!(W65C816::Instruction::LdaDirectPageIndirect(addr));
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TaxImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadByteSource::RegisterIndirectIndexed(reg, index) => {
+                LoadByteSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            add_instruction!(set_m_short!());
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TaxImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                LoadByteSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                    add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                    add_instruction!(W65C816::Instruction::TaxImplied);
+                }
+                LoadByteSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                    add_instruction!(W65C816::Instruction::TaxImplied);
                 }
             },
             IndexRegister::Y => match source {
                 LoadByteSource::Immediate(value) => {
                     match compile_expression(value, identifiers, scope_info, state) {
                         CompileResult::Success(comp_value) => {
-                            add_instruction!(set_m_short!());
-                            add_instruction!(W65C816::Instruction::LdaImmediate(comp_value, true));
-                            add_instruction!(set_m_long!());
-                            add_instruction!(W65C816::Instruction::TayImplied);
+                            add_instruction!(W65C816::Instruction::LdyImmediate(comp_value, true));
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
@@ -1284,9 +1265,8 @@ fn compile_load_byte_instruction(
                 LoadByteSource::Absolute(addr) => {
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => {
-                            add_instruction!(set_m_short!());
                             add_instruction!(W65C816::Instruction::LdaAbsolute(comp_addr));
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TayImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -1296,19 +1276,21 @@ fn compile_load_byte_instruction(
                     match compile_expression(addr, identifiers, scope_info, state) {
                         CompileResult::Success(comp_addr) => match index {
                             IndexRegister::X => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedX(
                                     comp_addr
                                 ));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::TayImplied);
                             }
                             IndexRegister::Y => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedY(
                                     comp_addr
                                 ));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::TayImplied);
                             }
                         },
@@ -1319,37 +1301,37 @@ fn compile_load_byte_instruction(
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            add_instruction!(set_m_short!());
                             add_instruction!(W65C816::Instruction::LdaDirectPageIndirect(addr));
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TayImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                LoadByteSource::RegisterIndirectIndexed(reg, index) => {
+                LoadByteSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
-                            add_instruction!(set_m_short!());
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
-                            add_instruction!(set_m_long!());
+                            add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                            add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
                             add_instruction!(W65C816::Instruction::TayImplied);
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                LoadByteSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                    add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                    add_instruction!(W65C816::Instruction::TayImplied);
+                }
+                LoadByteSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                    add_instruction!(W65C816::Instruction::TayImplied);
                 }
             },
         },
@@ -1363,11 +1345,9 @@ fn compile_load_byte_instruction(
                         } else {
                             match compile_expression(value, identifiers, scope_info, state) {
                                 CompileResult::Success(comp_value) => {
-                                    add_instruction!(set_m_short!());
                                     add_instruction!(W65C816::Instruction::LdaImmediate(
                                         comp_value, true
                                     ));
-                                    add_instruction!(set_m_long!());
                                     add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                                 }
                                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -1377,9 +1357,10 @@ fn compile_load_byte_instruction(
                     LoadByteSource::Absolute(addr) => {
                         match compile_expression(addr, identifiers, scope_info, state) {
                             CompileResult::Success(comp_addr) => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaAbsolute(comp_addr));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                             }
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -1389,19 +1370,21 @@ fn compile_load_byte_instruction(
                         match compile_expression(addr, identifiers, scope_info, state) {
                             CompileResult::Success(comp_addr) => match index {
                                 IndexRegister::X => {
-                                    add_instruction!(set_m_short!());
                                     add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedX(
                                         comp_addr
                                     ));
-                                    add_instruction!(set_m_long!());
+                                    add_instruction!(W65C816::Instruction::AndImmediate(
+                                        LOW_BYTE.clone()
+                                    ));
                                     add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                                 }
                                 IndexRegister::Y => {
-                                    add_instruction!(set_m_short!());
                                     add_instruction!(W65C816::Instruction::LdaAbsoluteIndexedY(
                                         comp_addr
                                     ));
-                                    add_instruction!(set_m_long!());
+                                    add_instruction!(W65C816::Instruction::AndImmediate(
+                                        LOW_BYTE.clone()
+                                    ));
                                     add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                                 }
                             },
@@ -1412,40 +1395,41 @@ fn compile_load_byte_instruction(
                         let addr_opt = get_register_address(reg, &state.reg_defines);
                         match addr_opt {
                             CompileResult::Success(addr) => {
-                                add_instruction!(set_m_short!());
                                 add_instruction!(W65C816::Instruction::LdaDirectPageIndirect(addr));
-                                add_instruction!(set_m_long!());
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
                                 add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                             }
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
                     }
-                    LoadByteSource::RegisterIndirectIndexed(reg, index) => {
+                    LoadByteSource::RegisterIndirectIndexed(reg) => {
                         let addr_opt = get_register_address(reg, &state.reg_defines);
                         match addr_opt {
-                            CompileResult::Success(addr) => match index {
-                                IndexRegister::X => {
-                                    add_instruction!(set_m_short!());
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                    add_instruction!(set_m_long!());
-                                    add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(set_m_short!());
-                                    add_instruction!(
-                                        W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(set_m_long!());
-                                    add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
-                                }
-                            },
+                            CompileResult::Success(addr) => {
+                                add_instruction!(
+                                    W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr)
+                                );
+                                add_instruction!(W65C816::Instruction::AndImmediate(
+                                    LOW_BYTE.clone()
+                                ));
+                                add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
+                            }
                             CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                         }
+                    }
+                    LoadByteSource::StackRelative(offset) => {
+                        add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+                        add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                        add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
+                    }
+                    LoadByteSource::StackRelativeIndirectIndexed(offset) => {
+                        add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                            offset.clone()
+                        ));
+                        add_instruction!(W65C816::Instruction::AndImmediate(LOW_BYTE.clone()));
+                        add_instruction!(W65C816::Instruction::StaDirectPage(taddr));
                     }
                 },
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
@@ -1519,31 +1503,33 @@ fn compile_store_byte_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
                             add_instruction!(W65C816::Instruction::TxaImplied);
                             add_instruction!(set_m_short!());
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::PhyImplied);
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::PlyImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                             add_instruction!(set_m_long!());
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(set_m_short!());
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                    add_instruction!(set_m_long!());
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(set_m_short!());
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(set_m_long!());
                 }
             },
             IndexRegister::Y => match target {
@@ -1592,30 +1578,33 @@ fn compile_store_byte_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
                         CompileResult::Success(addr) => {
                             add_instruction!(W65C816::Instruction::TyaImplied);
                             add_instruction!(set_m_short!());
-                            match index {
-                                IndexRegister::X => {
-                                    add_instruction!(W65C816::Instruction::TxyImplied);
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                    add_instruction!(W65C816::Instruction::TayImplied);
-                                }
-                                IndexRegister::Y => {
-                                    add_instruction!(
-                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                    );
-                                }
-                            }
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
                             add_instruction!(set_m_long!());
                         }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(set_m_short!());
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                    add_instruction!(set_m_long!());
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(set_m_short!());
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
+                    add_instruction!(set_m_long!());
                 }
             },
         },
@@ -1662,30 +1651,28 @@ fn compile_store_byte_instruction(
                                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                             }
                         }
-                        StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                        StoreTarget::RegisterIndirectIndexed(reg) => {
                             let addr_opt = get_register_address(reg, &state.reg_defines);
                             match addr_opt {
-                                CompileResult::Success(addr) => match index {
-                                    IndexRegister::X => {
-                                        add_instruction!(W65C816::Instruction::PhyImplied);
-                                        add_instruction!(W65C816::Instruction::TxyImplied);
-                                        add_instruction!(
-                                            W65C816::Instruction::StaDirectPageIndirectIndexedY(
-                                                addr
-                                            )
-                                        );
-                                        add_instruction!(W65C816::Instruction::PlyImplied);
-                                    }
-                                    IndexRegister::Y => {
-                                        add_instruction!(
-                                            W65C816::Instruction::StaDirectPageIndirectIndexedY(
-                                                addr
-                                            )
-                                        );
-                                    }
-                                },
+                                CompileResult::Success(addr) => {
+                                    add_instruction!(
+                                        W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
+                                    );
+                                }
                                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                             }
+                        }
+                        StoreTarget::StackRelative(offset) => {
+                            add_instruction!(W65C816::Instruction::StaStackRelative(
+                                offset.clone()
+                            ));
+                        }
+                        StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                            add_instruction!(
+                                W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                                    offset.clone()
+                                )
+                            );
                         }
                     }
                     add_instruction!(set_m_long!());
@@ -1696,8 +1683,8 @@ fn compile_store_byte_instruction(
         StoreSource::Immediate(value) => {
             match compile_expression(value, identifiers, scope_info, state) {
                 CompileResult::Success(comp_value) => {
-                    add_instruction!(set_m_short!());
                     add_instruction!(W65C816::Instruction::LdaImmediate(comp_value, true));
+                    add_instruction!(set_m_short!());
                 }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
@@ -1737,26 +1724,24 @@ fn compile_store_byte_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                StoreTarget::RegisterIndirectIndexed(reg, index) => {
+                StoreTarget::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
-                        CompileResult::Success(addr) => match index {
-                            IndexRegister::X => {
-                                add_instruction!(W65C816::Instruction::PhyImplied);
-                                add_instruction!(W65C816::Instruction::TxyImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                );
-                                add_instruction!(W65C816::Instruction::PlyImplied);
-                            }
-                            IndexRegister::Y => {
-                                add_instruction!(
-                                    W65C816::Instruction::StaDirectPageIndirectIndexedY(addr)
-                                );
-                            }
-                        },
+                        CompileResult::Success(addr) => {
+                            add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                        }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                StoreTarget::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+                }
+                StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             }
             add_instruction!(set_m_long!());
@@ -1865,11 +1850,6 @@ fn compile_pop_instruction(
 
     CompileResult::Success(result)
 }
-
-//match compile_expression(addr, identifiers, scope_info, state) {
-//    CompileResult::Success(comp_addr) => {}
-//    CompileResult::Failure(msg) => return CompileResult::Failure(msg),
-//}
 
 fn compile_increment_instruction(
     target: &CountTarget,
@@ -2054,22 +2034,22 @@ fn compile_left_alu_source(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::LdaStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2129,22 +2109,22 @@ fn compile_alu_target(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluTarget::RegisterIndirectIndexed(reg, index) => {
+        AluTarget::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::StaDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluTarget::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::StaStackRelative(offset.clone()));
+        }
+        AluTarget::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::StaStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2226,22 +2206,22 @@ fn compile_add_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::AdcDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::AdcDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::AdcDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::AdcStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::AdcStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2329,22 +2309,22 @@ fn compile_subtract_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::SbcStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::SbcStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2427,22 +2407,22 @@ fn compile_bitwise_and_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::AndDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::AndDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::AndDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::AndStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::AndStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2525,22 +2505,22 @@ fn compile_bitwise_xor_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::EorDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::EorDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::EorDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::EorStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::EorStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2623,22 +2603,22 @@ fn compile_bitwise_or_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::OraDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::OraDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::OraDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::OraStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::OraStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -2717,22 +2697,22 @@ fn compile_negate_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        AluSource::RegisterIndirectIndexed(reg, index) => {
+        AluSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::SbcDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
+        }
+        AluSource::StackRelative(offset) => {
+            add_instruction!(W65C816::Instruction::SbcStackRelative(offset.clone()));
+        }
+        AluSource::StackRelativeIndirectIndexed(offset) => {
+            add_instruction!(W65C816::Instruction::SbcStackRelativeIndirectIndexedY(
+                offset.clone()
+            ));
         }
     }
 
@@ -3367,28 +3347,27 @@ fn compile_compare_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                CompareWithSource::RegisterIndirectIndexed(reg, index) => {
+                CompareWithSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
-                        CompileResult::Success(addr) => match index {
-                            IndexRegister::X => {
-                                add_instruction!(W65C816::Instruction::PhyImplied);
-                                add_instruction!(W65C816::Instruction::TxyImplied);
-                                add_instruction!(W65C816::Instruction::TxaImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                                add_instruction!(W65C816::Instruction::PlyImplied);
-                            }
-                            IndexRegister::Y => {
-                                add_instruction!(W65C816::Instruction::TxaImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                            }
-                        },
+                        CompileResult::Success(addr) => {
+                            add_instruction!(W65C816::Instruction::TxaImplied);
+                            add_instruction!(W65C816::Instruction::CmpDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                        }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                CompareWithSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(W65C816::Instruction::CmpStackRelative(offset.clone()));
+                }
+                CompareWithSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TxaImplied);
+                    add_instruction!(W65C816::Instruction::CmpStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             },
             IndexRegister::Y => match right {
@@ -3446,27 +3425,27 @@ fn compile_compare_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                CompareWithSource::RegisterIndirectIndexed(reg, index) => {
+                CompareWithSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
-                        CompileResult::Success(addr) => match index {
-                            IndexRegister::X => {
-                                add_instruction!(W65C816::Instruction::TyaImplied);
-                                add_instruction!(W65C816::Instruction::TxyImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                                add_instruction!(W65C816::Instruction::TayImplied);
-                            }
-                            IndexRegister::Y => {
-                                add_instruction!(W65C816::Instruction::TyaImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                            }
-                        },
+                        CompileResult::Success(addr) => {
+                            add_instruction!(W65C816::Instruction::TyaImplied);
+                            add_instruction!(W65C816::Instruction::CmpDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                        }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                CompareWithSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(W65C816::Instruction::CmpStackRelative(offset.clone()));
+                }
+                CompareWithSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::TyaImplied);
+                    add_instruction!(W65C816::Instruction::CmpStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             },
         },
@@ -3531,26 +3510,24 @@ fn compile_compare_instruction(
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
                 }
-                CompareWithSource::RegisterIndirectIndexed(reg, index) => {
+                CompareWithSource::RegisterIndirectIndexed(reg) => {
                     let addr_opt = get_register_address(reg, &state.reg_defines);
                     match addr_opt {
-                        CompileResult::Success(addr) => match index {
-                            IndexRegister::X => {
-                                add_instruction!(W65C816::Instruction::PhyImplied);
-                                add_instruction!(W65C816::Instruction::TxyImplied);
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                                add_instruction!(W65C816::Instruction::PlyImplied);
-                            }
-                            IndexRegister::Y => {
-                                add_instruction!(
-                                    W65C816::Instruction::CmpDirectPageIndirectIndexedY(addr)
-                                );
-                            }
-                        },
+                        CompileResult::Success(addr) => {
+                            add_instruction!(W65C816::Instruction::CmpDirectPageIndirectIndexedY(
+                                addr
+                            ));
+                        }
                         CompileResult::Failure(msg) => return CompileResult::Failure(msg),
                     }
+                }
+                CompareWithSource::StackRelative(offset) => {
+                    add_instruction!(W65C816::Instruction::CmpStackRelative(offset.clone()));
+                }
+                CompareWithSource::StackRelativeIndirectIndexed(offset) => {
+                    add_instruction!(W65C816::Instruction::CmpStackRelativeIndirectIndexedY(
+                        offset.clone()
+                    ));
                 }
             }
         }
@@ -3674,20 +3651,12 @@ fn compile_bit_test_instruction(
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
-        BitTestWithSource::RegisterIndirectIndexed(reg, index) => {
+        BitTestWithSource::RegisterIndirectIndexed(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
             match addr_opt {
-                CompileResult::Success(addr) => match index {
-                    IndexRegister::X => {
-                        add_instruction!(W65C816::Instruction::PhyImplied);
-                        add_instruction!(W65C816::Instruction::TxyImplied);
-                        add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
-                        add_instruction!(W65C816::Instruction::PlyImplied);
-                    }
-                    IndexRegister::Y => {
-                        add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
-                    }
-                },
+                CompileResult::Success(addr) => {
+                    add_instruction!(W65C816::Instruction::LdaDirectPageIndirectIndexedY(addr));
+                }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
         }
@@ -3747,11 +3716,9 @@ fn compile_test_instruction(
     }
 
     match source {
-        TestSource::IndexRegister(reg) => {
-            match reg {
-                IndexRegister::X => add_instruction!(W65C816::Instruction::TxaImplied),
-                IndexRegister::Y => add_instruction!(W65C816::Instruction::TyaImplied),
-            }
+        TestSource::IndexRegister(reg) => match reg {
+            IndexRegister::X => add_instruction!(W65C816::Instruction::TxaImplied),
+            IndexRegister::Y => add_instruction!(W65C816::Instruction::TyaImplied),
         },
         TestSource::GeneralPurposeRegister(reg) => {
             let addr_opt = get_register_address(reg, &state.reg_defines);
@@ -3761,7 +3728,7 @@ fn compile_test_instruction(
                 }
                 CompileResult::Failure(msg) => return CompileResult::Failure(msg),
             }
-        },
+        }
     }
 
     CompileResult::Success(result)
@@ -3778,12 +3745,8 @@ fn compile_instruction(
         Instruction::Transfer(s, t) => {
             compile_transfer_instruction(s, t, identifiers, scope_info, state)
         }
-        Instruction::LoadWord(t, s) => {
-            compile_load_word_instruction(t, s, identifiers, scope_info, state)
-        }
-        Instruction::StoreWord(s, t) => {
-            compile_store_word_instruction(s, t, identifiers, scope_info, state)
-        }
+        Instruction::Load(t, s) => compile_load_instruction(t, s, identifiers, scope_info, state),
+        Instruction::Store(s, t) => compile_store_instruction(s, t, identifiers, scope_info, state),
         Instruction::LoadByte(t, s) => {
             compile_load_byte_instruction(t, s, identifiers, scope_info, state)
         }
@@ -4141,38 +4104,58 @@ fn compile_directive(
                                             }
                                         }
                                     }
-                                    Parameter::RegisterIndirectIndexed(reg, index) => {
+                                    Parameter::RegisterIndirectIndexed(reg) => {
                                         let saddr_opt =
                                             get_register_address(reg, &state.reg_defines);
                                         match saddr_opt {
                                             CompileResult::Success(saddr) => {
-                                                match index {
-                                                    IndexRegister::X => {
-                                                        result.push(
-                                                            W65C816::Statement::Instruction(
-                                                                W65C816::Instruction::PhyImplied,
-                                                            ),
-                                                        );
-                                                        result.push(
-                                                            W65C816::Statement::Instruction(
-                                                                W65C816::Instruction::TxyImplied,
-                                                            ),
-                                                        );
-                                                        result.push(W65C816::Statement::Instruction(
+                                                result.push(W65C816::Statement::Instruction(
                                                             W65C816::Instruction::LdaDirectPageIndirectIndexedY(saddr),
                                                         ));
-                                                        result.push(
-                                                            W65C816::Statement::Instruction(
-                                                                W65C816::Instruction::PlyImplied,
-                                                            ),
-                                                        );
-                                                    }
-                                                    IndexRegister::Y => {
-                                                        result.push(W65C816::Statement::Instruction(
-                                                            W65C816::Instruction::LdaDirectPageIndirectIndexedY(saddr),
-                                                        ));
-                                                    }
-                                                }
+                                                result.push(W65C816::Statement::Instruction(
+                                                    W65C816::Instruction::StaDirectPage(taddr),
+                                                ));
+                                            }
+                                            CompileResult::Failure(msg) => {
+                                                return CompileResult::Failure(msg)
+                                            }
+                                        }
+                                    }
+                                    Parameter::StackRelative(offset) => {
+                                        match compile_expression(
+                                            offset,
+                                            identifiers,
+                                            scope_info,
+                                            state,
+                                        ) {
+                                            CompileResult::Success(comp_offset) => {
+                                                result.push(W65C816::Statement::Instruction(
+                                                    W65C816::Instruction::LdaStackRelative(
+                                                        comp_offset,
+                                                    ),
+                                                ));
+                                                result.push(W65C816::Statement::Instruction(
+                                                    W65C816::Instruction::StaDirectPage(taddr),
+                                                ));
+                                            }
+                                            CompileResult::Failure(msg) => {
+                                                return CompileResult::Failure(msg)
+                                            }
+                                        }
+                                    }
+                                    Parameter::StackRelativeIndirectIndexed(offset) => {
+                                        match compile_expression(
+                                            offset,
+                                            identifiers,
+                                            scope_info,
+                                            state,
+                                        ) {
+                                            CompileResult::Success(comp_offset) => {
+                                                result.push(W65C816::Statement::Instruction(
+                                                    W65C816::Instruction::LdaStackRelativeIndirectIndexedY(
+                                                        comp_offset,
+                                                    ),
+                                                ));
                                                 result.push(W65C816::Statement::Instruction(
                                                     W65C816::Instruction::StaDirectPage(taddr),
                                                 ));

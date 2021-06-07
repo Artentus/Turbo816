@@ -779,7 +779,12 @@ fn compile_and_assemble(input_path: &Path, output_path: &Path) {
             if line == 0 {
                 println!("{}", msg)
             } else {
-                println!("Parse error in '{}' line {}:\n{}", source.display(), line, msg)
+                println!(
+                    "Parse error in '{}' line {}:\n{}",
+                    source.display(),
+                    line,
+                    msg
+                )
             }
         }
     }

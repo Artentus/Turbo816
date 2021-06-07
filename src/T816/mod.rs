@@ -11,6 +11,7 @@ const GLOBAL_REGISTER_COUNT: usize = 100;
 
 const ZERO: Expression = Expression::Literal(Wrapping(0));
 const MAX_VAL: Expression = Expression::Literal(Wrapping(0xFFFF));
+const LOW_BYTE: Expression = Expression::Literal(Wrapping(0x00FF));
 const VECTOR_OFFSET: Expression = Expression::Literal(Wrapping(0xFFE0));
 const COMPILER_FUNCTIONS_OFFSET: Expression = Expression::Literal(Wrapping(0xFF00));
 
@@ -124,30 +125,38 @@ impl Display for TransferArg {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum LoadWordSource {
+pub enum LoadSource {
     Immediate(Expression),
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
-impl Display for LoadWordSource {
+impl Display for LoadSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LoadWordSource::Immediate(value) => {
+            LoadSource::Immediate(value) => {
                 write!(f, "#{}", value.to_hex(2, true))
             }
-            LoadWordSource::Absolute(addr) => {
+            LoadSource::Absolute(addr) => {
                 write!(f, "{}", addr.to_hex(2, true))
             }
-            LoadWordSource::AbsoluteIndexed(addr, index) => {
+            LoadSource::AbsoluteIndexed(addr, index) => {
                 write!(f, "{}:{}", addr.to_hex(2, true), index)
             }
-            LoadWordSource::RegisterIndirect(reg) => {
+            LoadSource::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            LoadWordSource::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            LoadSource::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            LoadSource::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            LoadSource::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -159,7 +168,9 @@ pub enum LoadByteSource {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for LoadByteSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -176,8 +187,14 @@ impl Display for LoadByteSource {
             LoadByteSource::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            LoadByteSource::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            LoadByteSource::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            LoadByteSource::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            LoadByteSource::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -228,7 +245,9 @@ pub enum StoreTarget {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for StoreTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -242,8 +261,14 @@ impl Display for StoreTarget {
             StoreTarget::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            StoreTarget::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            StoreTarget::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            StoreTarget::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            StoreTarget::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -304,7 +329,9 @@ pub enum AluSource {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for AluSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -324,8 +351,14 @@ impl Display for AluSource {
             AluSource::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            AluSource::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            AluSource::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            AluSource::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            AluSource::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -337,7 +370,9 @@ pub enum AluTarget {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for AluTarget {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -354,8 +389,14 @@ impl Display for AluTarget {
             AluTarget::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            AluTarget::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            AluTarget::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            AluTarget::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            AluTarget::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -408,7 +449,9 @@ pub enum CompareWithSource {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for CompareWithSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -428,8 +471,14 @@ impl Display for CompareWithSource {
             CompareWithSource::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            CompareWithSource::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            CompareWithSource::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            CompareWithSource::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            CompareWithSource::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
@@ -510,7 +559,7 @@ pub enum BitTestWithSource {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
 }
 impl Display for BitTestWithSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -530,8 +579,8 @@ impl Display for BitTestWithSource {
             BitTestWithSource::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            BitTestWithSource::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            BitTestWithSource::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
             }
         }
     }
@@ -554,8 +603,8 @@ impl Display for TestSource {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Instruction {
     Transfer(TransferArg, TransferArg),
-    LoadWord(LoadTarget, LoadWordSource),
-    StoreWord(StoreSource, StoreTarget),
+    Load(LoadTarget, LoadSource),
+    Store(StoreSource, StoreTarget),
     LoadByte(LoadTarget, LoadByteSource),
     StoreByte(StoreSource, StoreTarget),
 
@@ -609,11 +658,11 @@ impl Display for Instruction {
             Instruction::Transfer(s, t) => {
                 write!(f, "TR {} -> {}", s, t)
             }
-            Instruction::LoadWord(t, s) => {
-                write!(f, "LDW {} <- {}", t, s)
+            Instruction::Load(t, s) => {
+                write!(f, "LD {} <- {}", t, s)
             }
-            Instruction::StoreWord(s, t) => {
-                write!(f, "STW {} -> {}", s, t)
+            Instruction::Store(s, t) => {
+                write!(f, "ST {} -> {}", s, t)
             }
             Instruction::LoadByte(t, s) => {
                 write!(f, "LDB {} <- {}", t, s)
@@ -738,7 +787,9 @@ pub enum Parameter {
     Absolute(Expression),
     AbsoluteIndexed(Expression, IndexRegister),
     RegisterIndirect(GeneralPurposeRegister),
-    RegisterIndirectIndexed(GeneralPurposeRegister, IndexRegister),
+    RegisterIndirectIndexed(GeneralPurposeRegister),
+    StackRelative(Expression),
+    StackRelativeIndirectIndexed(Expression),
 }
 impl Display for Parameter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -761,8 +812,14 @@ impl Display for Parameter {
             Parameter::RegisterIndirect(reg) => {
                 write!(f, "[{}]", reg)
             }
-            Parameter::RegisterIndirectIndexed(reg, index) => {
-                write!(f, "[{}]:{}", reg, index)
+            Parameter::RegisterIndirectIndexed(reg) => {
+                write!(f, "[{}]:Y", reg)
+            }
+            Parameter::StackRelative(offset) => {
+                write!(f, "{}:SP", offset.to_hex(2, true))
+            }
+            Parameter::StackRelativeIndirectIndexed(offset) => {
+                write!(f, "[{}:SP]:Y", offset.to_hex(2, true))
             }
         }
     }
